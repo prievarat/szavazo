@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+ <meta name="referrer" content="origin">
   <title>Anonim Szavazó App – Auth-os (tanóra)</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
   <!-- Chart.js -->
@@ -58,6 +59,15 @@
     .code{font-family:ui-monospace,Consolas,monospace;background:var(--surface-alt);border:1px dashed var(--border);padding:8px 10px;border-radius:8px;color:var(--text-2)}
     .footer{margin-top:16px;color:var(--text-muted);font-size:12px;text-align:center}
     canvas{max-height:360px}
+
+    /* ====== ÚJ: Likert átlag jelvény ====== */
+    .chart-wrap{ position:relative; }
+    .avg-badge{
+      position:absolute; top:8px; right:12px;
+      background:#fff; border:1px solid var(--border); border-radius:9999px;
+      padding:2px 10px; font-weight:700; font-size:14px; line-height:20px;
+      box-shadow:0 1px 2px rgba(0,0,0,.05);
+    }
   </style>
 </head>
 <body>
@@ -182,11 +192,11 @@
 // 1) Firebase beállítás – IDE ÍRD A SAJÁTODAT
 // ===================
 const firebaseConfig = {
- apiKey: "AIzaSyD2Gs-As_zot1XpOTLGxJbifib1usLI8sY",
+  apiKey: "AIzaSyD2Gs-As_zot1XpOTLGxJbifib1usLI8sY",
   authDomain: "szavazo-ee3b9.firebaseapp.com",
   databaseURL: "https://szavazo-ee3b9-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "szavazo-ee3b9",
-  storageBucket: "szavazo-ee3b9.appspot.com",   // fontos: .appspot.com!
+  storageBucket: "szavazo-ee3b9.appspot.com",
   messagingSenderId: "599940957583",
   appId: "1:599940957583:web:77e2f10b983a59fb61b7fa"
 };
@@ -323,6 +333,21 @@ function addQuestion(prefill){
   wrap.appendChild(mk('div','hr'));
   wrap.appendChild(controls);
 
+  // mentéshez szükséges getter a wrap-hez
+  wrap._getQuestion = () => {
+    const text = (qInp.value || '').trim();
+    const type = (selType.value || 'likert');
+    let options = [];
+    if(type === 'likert'){
+      options = ['1','2','3','4','5'];
+    } else {
+      const raw = (cInp.value || '').trim();
+      options = raw.split(',').map(s=>s.trim()).filter(Boolean);
+      if(options.length < 2) options = ['A','B','C'];
+    }
+    return { text, type, options };
+  };
+
   questionsEl.appendChild(wrap);
 }
 
@@ -336,7 +361,6 @@ function renumberQuestions(){
 }
 
 el('#add-question').addEventListener('click',()=> addQuestion());
-
 el('#clear-questions').addEventListener('click',()=>{
   questionsEl.innerHTML=''; questionCount=0;
 });
@@ -350,7 +374,8 @@ addQuestion({text:'Melyik projektötlet legyen?', type:'custom', custom:'Ötlet 
 // ===================
 let currentRoom = null;
 let charts = [];
-let votesUnsub = null;  
+let votesUnsub = null;
+
 async function createRoom(){
   const status = el('#create-status');
   try{
@@ -366,29 +391,17 @@ async function createRoom(){
 
     const title = el('#poll-title').value.trim() || 'Névtelen szavazás';
 
-    // kérdések kigyűjtése
+    // kérdések kigyűjtése (TYPE mentéssel!)
     const qs = [];
     [...questionsEl.children].forEach(card=>{
-      const inputs  = card.querySelectorAll('input');
-      const selects = card.querySelectorAll('select');
-      const text = (inputs[0]?.value || '').trim();
-      const type = (selects[0]?.value || 'likert');
-      let options = [];
-      if(type === 'likert'){
-        options = ['1','2','3','4','5'];
-      } else {
-        const raw = (inputs[1]?.value || '').trim();
-        options = raw.split(',').map(s=>s.trim()).filter(Boolean);
-        if(options.length < 2) options = ['A','B','C'];
-      }
-      if(text) qs.push({ text, options });
+      const q = card._getQuestion ? card._getQuestion() : null;
+      if(q && q.text) qs.push(q);
     });
     if(qs.length === 0){
       setStatus(status,'Adj meg legalább egy kérdést.','error'); 
       return;
     }
 
-    // szobakód és írás KÜLÖN ágakra (meta + questions)
     const code = randomCode();
     const roomRef = db.ref(`rooms/${code}`);
 
@@ -401,7 +414,6 @@ async function createRoom(){
 
     await roomRef.child('questions').set(qs);
 
-    // UI frissítés
     currentRoom = code;
     el('#room-code').textContent = code;
     setStatus(status, `Szoba létrehozva: ${code}`, 'success');
@@ -416,18 +428,53 @@ async function createRoom(){
 }
 
 // ===================
-// 6) Eredmények – valós időben (votes -> aggregálás)
+// 6) Likert ÁTLAG – helpertéglák
 // ===================
+function computeLikertAverageFromTallies(tallies){
+  // tallies: [n1,n2,n3,n4,n5] -> átlag (1..5)
+  const total = tallies.reduce((a,b)=>a+b,0);
+  if(!total) return NaN;
+  let sum = 0;
+  for(let i=0;i<tallies.length;i++){
+    sum += tallies[i] * (i+1);
+  }
+  return sum / total;
+}
+function mountLikertAverageBadge(container){
+  // container: a chartot körülölelő .chart-wrap
+  container.classList.add('chart-wrap');
+  let badge = container.querySelector('.avg-badge');
+  if(!badge){
+    badge = document.createElement('div');
+    badge.className = 'avg-badge';
+    badge.textContent = 'Átlag: —';
+    container.appendChild(badge);
+  }
+  return (avg)=>{ badge.textContent = `Átlag: ${isNaN(avg) ? '—' : avg.toFixed(2)}`; };
+}
+
+// ===================
+// 7) Eredmények – valós időben (votes -> aggregálás + likert átlag)
+// ===================
+let avgSetters = []; // kérdésindex -> setter (ha likert), különben null
+
 function attachResults(code, questions){
   const container = el('#results-container');
   container.innerHTML=''; 
   charts = [];
+  avgSetters = [];
 
   // kártyák + chartok felépítése
   questions.forEach((q,idx)=>{
     const card = mk('div','card');
     const t = mk('div','title'); t.textContent = `Q${idx+1}. ${q.text}`; card.appendChild(t);
-    const canvas = mk('canvas'); canvas.id = `chart_${idx}`; card.appendChild(canvas);
+
+    // Canvas egy chart-wrap-ben, hogy legyen hely a jelvénynek
+    const wrap = mk('div','chart-wrap');
+    const canvas = mk('canvas'); canvas.id = `chart_${idx}`;
+    wrap.appendChild(canvas);
+    card.appendChild(wrap);
+
     const foot = mk('div','small muted'); foot.id=`chart_total_${idx}`; foot.textContent='—'; card.appendChild(foot);
     container.appendChild(card);
 
@@ -438,6 +485,13 @@ function attachResults(code, questions){
       options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ x:{ticks:{color:'#334155'}}, y:{beginAtZero:true,ticks:{color:'#334155'}, grid:{color:'rgba(51,65,85,0.12)'} } } }
     });
     charts.push(chart);
+
+    // Ha Likert, tegyük fel az átlag jelvényt
+    if (q.type === 'likert' || (Array.isArray(q.options) && q.options.length===5 && q.options.join(',')==='1,2,3,4,5')){
+      avgSetters[idx] = mountLikertAverageBadge(wrap);
+    } else {
+      avgSetters[idx] = null;
+    }
   });
 
   // előző feliratkozás lekapcsolása, ha volt
@@ -451,6 +505,8 @@ function attachResults(code, questions){
   const handler = (snap)=>{
     const votes = snap.val() || {};
     const tallies = questions.map(q=> q.options.map(()=>0));
+
+    // votes: { uid: [optIndexForQ0, optIndexForQ1, ...] }
     Object.values(votes).forEach(arr=>{
       if(Array.isArray(arr)){
         arr.forEach((optIndex, qi)=>{
@@ -460,23 +516,30 @@ function attachResults(code, questions){
         });
       }
     });
+
     tallies.forEach((arr,i)=>{
       if(charts[i]){
         charts[i].data.datasets[0].data = arr;
         charts[i].update();
+
         const total = arr.reduce((a,b)=>a+b,0);
         const foot = el(`#chart_total_${i}`);
         if(foot) foot.textContent = `Összes szavazat: ${total}`;
+
+        // Likert átlag frissítés (ha van setter)
+        if (avgSetters[i]){
+          const avg = computeLikertAverageFromTallies(arr);
+          avgSetters[i](avg);
+        }
       }
     });
   };
   ref.on('value', handler);
-  votesUnsub = () => ref.off('value', handler); // <-- itt állítjuk be
+  votesUnsub = () => ref.off('value', handler);
 }
 
-
 // ===================
-// 7) CSV letöltés (votes-ból számolt pillanatkép)
+// 8) CSV letöltés (votes-ból számolt pillanatkép)
 // ===================
 el('#download-csv').addEventListener('click', async ()=>{
   if(!db || !currentRoom){ alert('Nincs aktív szoba.'); return; }
@@ -504,6 +567,8 @@ el('#download-csv').addEventListener('click', async ()=>{
       const n = (tallies[i] && tallies[i][j])? tallies[i][j] : 0;
       csv += `"${opt.replaceAll('"','""')}",${n}\n`;
     });
+    // (opcionális bővítés, ha szeretnéd menteni az átlagot is: itt kiszámolható)
+    // if (q.type==='likert') { const avg = computeLikertAverageFromTallies(tallies[i]); csv += `"Átlag",${isNaN(avg)?'':avg.toFixed(2)}\n`; }
   });
   const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');
@@ -513,7 +578,7 @@ el('#download-csv').addEventListener('click', async ()=>{
 });
 
 // ===================
-// 8) Diák oldal – csatlakozás és szavazás (anon auth)
+// 9) Diák oldal – csatlakozás és szavazás (anon auth)
 // ===================
 let joinedRoom = null;
 let voteState = [];
@@ -615,7 +680,7 @@ el('#clear-votes').addEventListener('click', async ()=>{
 });
 
 // ===================
-// 9) Vezérlők eseményei
+// 10) Vezérlők eseményei
 // ===================
 el('#create-room').addEventListener('click', createRoom);
 el('#close-room').addEventListener('click', closeRoom);
@@ -628,6 +693,8 @@ el('#test-conn').addEventListener('click', async ()=>{
     setStatus(status, 'Kapcsolat rendben ✔ (' + s.val() + ')', 'success');
   }catch(e){ setStatus(status, 'Kapcsolat hiba: ' + (e.message || e), 'error'); }
 });
+
+// (Meglévő: closeRoom implementációja nálad – ha még nincs, tudok adni.)
 </script>
 </body>
 </html>
