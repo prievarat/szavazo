@@ -126,6 +126,10 @@
                 <button id="add-question">+ Kérdés hozzáadása</button>
                 <button id="clear-questions" class="secondary">Kérdések törlése</button>
               </div>
+<div class="controls">
+  <button id="save-questions-local" class="secondary">Kérdések mentése (helyi)</button>
+  <button id="load-questions-local" class="secondary">Kérdések betöltése (helyi)</button>
+</div>
             </div>
             <div class="hr"></div>
             <div class="grid two">
@@ -368,6 +372,66 @@ el('#clear-questions').addEventListener('click',()=>{
 // Alapértelmezett két minta kérdés
 addQuestion({text:'Mennyire tetszett a mai óra?', type:'likert'});
 addQuestion({text:'Melyik projektötlet legyen?', type:'custom', custom:'Ötlet A, Ötlet B, Ötlet C'});
+
+// ====== Helyi mentés / betöltés (LocalStorage) ======
+const LS_KEY_QUESTIONS = 'poll_questions_v1';
+const LS_KEY_TITLE = 'poll_title_v1';
+
+// Mentés: a beírt cím + kérdések (text, type, options) kerülnek a LocalStorage-ba
+function saveQuestionsToLocal(){
+  const title = (el('#poll-title')?.value || '').trim();
+  const qs = [];
+  [...questionsEl.children].forEach(card=>{
+    const q = card._getQuestion ? card._getQuestion() : null;
+    if(q && q.text) qs.push(q);
+  });
+  try{
+    localStorage.setItem(LS_KEY_TITLE, title);
+    localStorage.setItem(LS_KEY_QUESTIONS, JSON.stringify(qs));
+    setStatus('#create-status','Kérdések helyben elmentve.','success');
+  }catch(e){
+    console.error(e);
+    setStatus('#create-status','Mentési hiba (LocalStorage).','error');
+  }
+}
+
+// Betöltés: kiolvassa és visszarajzolja a kérdéseket a felületre
+function loadQuestionsFromLocal(){
+  try{
+    const title = localStorage.getItem(LS_KEY_TITLE) || '';
+    const raw = localStorage.getItem(LS_KEY_QUESTIONS);
+    if(!raw){
+      setStatus('#create-status','Nincs mentett kérdés a böngészőben.','info');
+      return;
+    }
+    const qs = JSON.parse(raw);
+    // UI törlése és újrarajzolás
+    questionsEl.innerHTML = '';
+    questionCount = 0;
+    (qs || []).forEach(q=>{
+      // addQuestion ismeri a {text, type, custom} formát; ha custom az options, visszaalakítjuk
+      if(q?.type === 'custom' && Array.isArray(q.options)){
+        addQuestion({ text: q.text, type: 'custom', custom: q.options.join(', ') });
+      }else{
+        // likert vagy bármi más (ha nincs type, likertre esik)
+        addQuestion({ text: q.text, type: q.type || 'likert' });
+      }
+    });
+    if(el('#poll-title')) el('#poll-title').value = title;
+
+    setStatus('#create-status','Kérdések betöltve a helyi tárból.','success');
+  }catch(e){
+    console.error(e);
+    setStatus('#create-status','Betöltési hiba (LocalStorage).','error');
+  }
+}
+
+// Gombok összekötése
+const btnSaveLocal = el('#save-questions-local');
+if(btnSaveLocal) btnSaveLocal.addEventListener('click', saveQuestionsToLocal);
+
+const btnLoadLocal = el('#load-questions-local');
+if(btnLoadLocal) btnLoadLocal.addEventListener('click', loadQuestionsFromLocal);
 
 // ===================
 // 5) Szoba létrehozása (Tanár)
