@@ -1,764 +1,535 @@
 <!DOCTYPE html>
 <html lang="hu">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
- <meta name="referrer" content="origin">
-  <title>Anonim Szavazó App – Auth-os (tanóra)</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <!-- Firebase v9 compat (böngészőbarát importok) -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-  <style>
-    :root{
-      --primary-100:#E0EAFF; --primary-300:#AFC8FF; --primary-500:#3B82F6; --primary-700:#1D4ED8; --primary-900:#172554;
-      --secondary-100:#D9F8F4; --secondary-300:#9EE7DD; --secondary-500:#14B8A6; --secondary-700:#0F766E;
-      --bg:#FAFAFC; --surface:#FFFFFF; --surface-alt:#F5F7FB; --border:#E5E7EB;
-      --text:#0F172A; --text-2:#334155; --text-muted:#64748B; --text-inverse:#FFFFFF;
-      --success:#16A34A; --warning:#F59E0B; --error:#DC2626;
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;height:100%;font-family:Inter, Nunito, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text)}
-    .wrap{max-width:1200px;margin:0 auto;padding:24px}
-    header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:16px}
-    h1{font-size:32px;line-height:1.2;margin:0 0 4px;font-weight:700;color:var(--text)}
-    .muted{color:var(--text-muted)}
-    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 4px 14px rgba(17,24,39,0.06)}
-    .qcard{background:var(--surface-alt); border:1px solid var(--border)}
-    .grid{display:grid;gap:24px}
-    .two{grid-template-columns:1fr 1fr}
-    @media (max-width: 900px){ .two{grid-template-columns:1fr} }
-    .controls{display:flex;gap:8px;flex-wrap:wrap}
-    button,.btn{background:var(--primary-700);border:1px solid var(--primary-700);color:var(--text-inverse);padding:10px 14px;border-radius:9999px;font-weight:700;cursor:pointer;transition:filter .18s ease, box-shadow .18s ease}
-    button:hover{filter:brightness(0.98)}
-    button.secondary{background:transparent;border-color:var(--primary-300);color:var(--primary-700)}
-    button.secondary:hover{box-shadow:0 2px 8px rgba(29,78,216,0.15);background:var(--primary-100)}
-    button.danger{background:var(--error);border-color:var(--error)}
-    button[disabled]{opacity:.6; cursor:not-allowed}
-    input,select,textarea{width:100%;padding:12px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border);color:var(--text);transition:border-color .18s ease, box-shadow .18s ease}
-    input::placeholder, textarea::placeholder{color:var(--text-muted)}
-    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--secondary-500);box-shadow:0 0 0 3px rgba(20,184,166,0.25)}
-    label{display:block;font-size:14px;margin-bottom:6px;color:var(--text-2)}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    .pill{display:inline-block;padding:6px 10px;border-radius:9999px;background:var(--surface-alt);border:1px solid var(--border);color:var(--text-2);font-size:12px}
-    .hr{height:1px;background:var(--border);margin:12px 0}
-    .hidden{display:none}
-    .center{display:flex;align-items:center;justify-content:center}
-    .title{font-weight:700;font-size:18px;margin:0 0 8px;color:var(--text)}
-    .small{font-size:12px;color:var(--text-muted)}
-    .list{display:grid;gap:8px}
-    .option-btn{display:block;width:100%;text-align:left;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:box-shadow .18s ease, border-color .18s ease, background .18s ease}
-    .option-btn:hover{box-shadow:0 2px 8px rgba(17,24,39,0.06);background:var(--surface-alt)}
-    .option-btn.selected{border-color:var(--secondary-500);box-shadow:0 0 0 3px rgba(20,184,166,0.28)}
-    .role-tabs{display:flex;gap:10px;margin:8px 0 16px}
-    .role-tabs button{padding:10px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--border);color:var(--text-2)}
-    .role-tabs button.active{background:var(--primary-700);border-color:var(--primary-700);color:var(--text-inverse)}
-    .code{font-family:ui-monospace,Consolas,monospace;background:var(--surface-alt);border:1px dashed var(--border);padding:8px 10px;border-radius:8px;color:var(--text-2)}
-    .footer{margin-top:16px;color:var(--text-muted);font-size:12px;text-align:center}
-    canvas{max-height:360px}
-
-    /* ====== ÚJ: Likert átlag jelvény ====== */
-    .chart-wrap{ position:relative; }
-    .avg-badge{
-      position:absolute; top:8px; right:12px;
-      background:#fff; border:1px solid var(--border); border-radius:9999px;
-      padding:2px 10px; font-weight:700; font-size:14px; line-height:20px;
-      box-shadow:0 1px 2px rgba(0,0,0,.05);
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI – Igaz/Hamis Szavazólap (Single File, PIN, Rate Limit)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Nunito:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* DESIGN BRIEF COLORS */
+    --primary-300:#F9C97A; --primary-500:#F4A329; --primary-700:#B45309;
+    --secondary-300:#7EDAD6; --secondary-500:#2BB6B4; --secondary-700:#0F766E;
+    --accent-300:#F49DB8; --accent-500:#E8467B; --accent-700:#A61E4D;
+    --bg:#FFF7F2; --surface:#FFFFFF; --surface-alt:#F5F7FA; --border:#E6E9EF;
+    --text:#1F2937; --text-2:#4B5563; --text-muted:#6B7280; --text-inverse:#FFFFFF;
+    --success:#2F9E44; --warning:#F59F00; --error:#D92D20; --info:#2563EB;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter, Nunito, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;background:var(--bg);color:var(--text)}
+  .wrap{max-width:1200px;margin:auto;padding:24px}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+  h1{font-size:32px;line-height:1.15;margin:0;color:var(--text)}
+  .role-switch{display:flex;gap:8px;flex-wrap:wrap}
+  button,.btn{appearance:none;border:1px solid var(--primary-300);background:var(--primary-500);color:var(--text-inverse);padding:10px 14px;border-radius:16px;cursor:pointer;font-weight:600;box-shadow:0 4px 14px rgba(17,24,39,0.08);transition:filter .18s ease, transform .18s ease}
+  button:hover,.btn:hover{filter:brightness(0.95);transform:translateY(-1px)}
+  .ghost{background:transparent;color:var(--primary-700);border-color:var(--primary-300);box-shadow:none}
+  .ghost:hover{background:rgba(249,201,122,0.18)}
+  .pill{background:var(--surface);border:1px solid var(--border);color:var(--text-2);padding:6px 10px;border-radius:9999px;font-size:12px}
+  .grid{display:grid;gap:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:0 4px 14px rgba(17,24,39,0.08)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:220px}
+  label{font-size:12px;color:var(--text-muted)}
+  input,select{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 12px;outline:none}
+  input:focus,select:focus{border-color:var(--secondary-500);box-shadow:0 0 0 2px rgba(43,182,180,0.25)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .muted{color:var(--text-muted)}
+  .big{font-size:20px}
+  .statement{font-size:24px;line-height:1.35;margin:8px 0 16px;color:var(--text)}
+  .cta{display:flex;gap:12px;justify-content:center}
+  .vote{font-size:18px;padding:14px 18px;border-radius:16px}
+  .truth{border-color:rgba(47,158,68,.25);background:rgba(47,158,68,.08);color:var(--success)}
+  .lie{border-color:rgba(217,45,32,.25);background:rgba(217,45,32,.08);color:var(--error)}
+  .truth:hover{box-shadow:0 0 0 3px rgba(47,158,68,.15)}
+  .lie:hover{box-shadow:0 0 0 3px rgba(217,45,32,.15)}
+  .progress{display:flex;gap:8px}
+  .bar{flex:1;background:var(--surface-alt);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .fill{height:18px;background:linear-gradient(90deg,var(--secondary-500), var(--primary-500));width:0%}
+  .bar.bad .fill{background:linear-gradient(90deg,var(--error),#FFB4A3)}
+  .bar.good .fill{background:linear-gradient(90deg,var(--success),#B8F7D6)}
+  .kpi{min-width:90px;text-align:center;color:var(--text-2)}
+  .small{font-size:12px;color:var(--text-muted)}
+  .footnote{font-size:11px;color:var(--text-muted);margin-top:8px}
+  .tag{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:9999px;background:var(--surface-alt);border:1px solid var(--border);color:var(--text-2);font-size:12px}
+  .hidden{display:none}
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  th,td{padding:10px;border-bottom:1px solid var(--border);font-size:14px;text-align:left}
+  th{color:var(--text-2)}
+</style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>Anonim Szavazó App – Auth</h1>
-    <div class="row small muted">
-      <span class="pill">Tanári létrehozás (auth)</span>
-      <span class="pill">Diák belépés (anon)</span>
-      <span class="pill">Valós idejű eredmények</span>
-      <span class="pill">max. 10 kérdés</span>
-    </div>
-  </header>
+  <div class="wrap">
+    <header>
+      <h1>AI – Igaz/Hamis szavazólap <span class="pill">single-file</span></h1>
+      <div class="role-switch">
+        <button id="hostBtn">Tanári nézet</button>
+        <button class="ghost" id="voterBtn">Szavazói nézet</button>
+      </div>
+    </header>
 
-  <div class="card">
-    <div class="role-tabs">
-      <button id="tab-teacher" class="active">Tanár</button>
-      <button id="tab-student">Diák</button>
-    </div>
+    <!-- HOST VIEW -->
+    <section id="hostView" class="card hidden">
+      <div class="grid">
+        <div class="row">
+          <div class="field">
+            <label>Szoba kód</label>
+            <div class="row">
+              <input id="roomCode" class="mono" placeholder="pl. ABC12" />
+              <button id="createRoom">Szoba létrehozása</button>
+              <button id="endRoom" class="ghost hidden">Szoba lezárása</button>
+            </div>
+            <div id="roomStatus" class="small"></div>
+          </div>
+          <div class="field">
+            <label>Megosztható link</label>
+            <div class="row">
+              <input id="shareUrl" class="mono" readonly />
+              <button class="ghost" id="copyLink">Link másolása</button>
+            </div>
+            <div class="small">Nyisd meg a linket telefonon a szavazáshoz.</div>
+          </div>
+        </div>
 
-    <!-- TEACHER VIEW -->
-    <section id="teacher-view">
-      <div class="grid two">
-        <div class="card">
-          <p class="title">Tanári bejelentkezés</p>
-          <div class="grid">
-            <div class="grid two">
-              <div>
-                <label>E-mail</label>
-                <input id="teacher-email" placeholder="tanar@example.com" />
-              </div>
-              <div>
-                <label>Jelszó</label>
-                <input id="teacher-pass" type="password" placeholder="••••••••" />
+        <div class="card" style="background:var(--surface-alt)">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div>
+              <div class="small">Állítás</div>
+              <div id="statement" class="statement">—</div>
+              <div class="row" style="gap:8px">
+                <span class="tag">#<span id="idx">–</span> / <span id="total">–</span></span>
+                <span class="tag">Leadott szavazat: <strong id="votes">0</strong></span>
+                <span class="tag">Résztvevők: <strong id="participants">0</strong></span>
               </div>
             </div>
-            <div class="controls">
-              <button id="teacher-login">Bejelentkezés</button>
-              <button id="teacher-logout" class="secondary">Kijelentkezés</button>
+            <div class="row">
+              <input id="adminPin" class="mono" placeholder="Admin PIN" style="max-width:140px" />
+              <button id="setPin" class="ghost">PIN megerősítése</button>
+              <button id="prev">◀ Előző</button>
+              <button class="ghost" id="resetSlide">Szavazatok törlése</button>
+              <button id="next">Következő ▶</button>
             </div>
-            <div id="auth-status" class="small"></div>
+          </div>
+          <div style="margin-top:14px" class="grid">
+            <div class="row" style="align-items:center;gap:16px">
+              <div class="kpi">
+                <div class="small">IGAZ</div>
+                <div id="trueCount" class="big">0</div>
+              </div>
+              <div class="bar good"><div id="trueFill" class="fill"></div></div>
+            </div>
+            <div class="row" style="align-items:center;gap:16px">
+              <div class="kpi">
+                <div class="small">HAMIS</div>
+                <div id="falseCount" class="big">0</div>
+              </div>
+              <div class="bar bad"><div id="falseFill" class="fill"></div></div>
+            </div>
           </div>
         </div>
 
         <div class="card">
-          <p class="title">Új szavazás létrehozása</p>
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <h2>Admin – Résztvevők és eredmények</h2>
+            <div class="row">
+              <button class="ghost" id="exportCsv">Export CSV</button>
+              <button class="ghost" id="refreshAdmin">Frissítés</button>
+            </div>
+          </div>
+          <div class="small muted" style="margin-bottom:6px">Egyszerre akár 50 résztvevő. A táblázat valós időben frissül.</div>
           <div class="grid">
-            <div>
-              <label>Szavazás címe</label>
-              <input id="poll-title" placeholder="pl. Osztályvita a projekttémákról" />
-            </div>
-            <div>
-              <label>Kérdések (max. 10)</label>
-              <div id="questions"></div>
-              <div class="controls">
-                <button id="add-question">+ Kérdés hozzáadása</button>
-                <button id="clear-questions" class="secondary">Kérdések törlése</button>
-              </div>
-<div class="controls">
-  <button id="save-questions-local" class="secondary">Kérdések mentése (helyi)</button>
-  <button id="load-questions-local" class="secondary">Kérdések betöltése (helyi)</button>
-</div>
-            </div>
-            <div class="hr"></div>
-            <div class="grid two">
-              <div>
-                <label>Szobakód (automatikus)</label>
-                <div class="code" id="room-code">—</div>
-                <div id="create-status" class="small" style="margin-top:6px"></div>
-              </div>
-              <div class="controls" style="align-self:end;justify-content:flex-end">
-                <button id="create-room" disabled>Szoba létrehozása</button>
-                <button id="test-conn" class="secondary">Kapcsolat teszt</button>
-                <button id="close-room" class="danger" disabled>Szoba lezárása</button>
-              </div>
-            </div>
-            <div class="small muted">Oszd meg a szobakódot a diákokkal. A szavazás anonim; csak az összesített eredmények láthatók.</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Név</th>
+                  <th>Leadott szavazat</th>
+                  <th>Teljesítés</th>
+                  <th>Utolsó aktivitás</th>
+                </tr>
+              </thead>
+              <tbody id="adminTable"></tbody>
+            </table>
           </div>
         </div>
 
-        <div class="card">
-          <p class="title">Eredmények</p>
-          <div id="results-container" class="grid"></div>
-          <div class="controls" style="margin-top:8px">
-            <button id="download-csv" class="secondary" disabled>CSV letöltése</button>
+        <div class="footnote">Tipp: A „Szavazatok törlése” csak az aktuális állításra vonatkozik. Egy eszköz/név egy állításra egyszer szavazhat.</div>
+      </div>
+    </section>
+
+    <!-- VOTER VIEW -->
+    <section id="voterView" class="card hidden">
+      <div class="grid">
+        <div class="row">
+          <div class="field">
+            <label>Csatlakozás szobához</label>
+            <div class="row">
+              <input id="joinCode" class="mono" placeholder="pl. ABC12" />
+            </div>
           </div>
+          <div class="field">
+            <label>Saját név (kötelező)</label>
+            <div class="row">
+              <input id="displayName" placeholder="pl. Kiss Anna" />
+              <button id="joinBtn">Csatlakozás</button>
+            </div>
+            <div id="joinStatus" class="small"></div>
+          </div>
+        </div>
+
+        <div id="voterPanel" class="hidden">
+          <div class="small">Állítás</div>
+          <div id="voterStatement" class="statement">—</div>
+          <div class="cta">
+            <button id="voteTrue" class="vote truth">IGAZ</button>
+            <button id="voteFalse" class="vote lie">HAMIS</button>
+          </div>
+          <div id="voterThanks" class="small" style="margin-top:10px"></div>
+          <div class="footnote">Egy állításra névenként és eszközönként egyszer szavazhatsz.</div>
         </div>
       </div>
     </section>
 
-    <!-- STUDENT VIEW -->
-    <section id="student-view" class="hidden">
-      <div class="grid two">
-        <div class="card">
-          <p class="title">Csatlakozás szobához</p>
-          <div class="grid">
-            <div>
-              <label>Szobakód</label>
-              <input id="join-room-code" placeholder="pl. X7FQ9" maxlength="10" />
-            </div>
-            <div class="controls">
-              <button id="join-room">Belépés</button>
-            </div>
-            <div class="small muted" id="join-status"></div>
-          </div>
-        </div>
-        <div class="card">
-          <p class="title">Szavazás</p>
-          <div id="vote-area" class="grid"></div>
-          <div class="controls">
-            <button id="submit-votes">Válaszok elküldése</button>
-            <button id="clear-votes" class="secondary">Válaszok törlése a készüléken</button>
-          </div>
-          <div class="small muted">A részvételed névtelen. A rendszer csak az összesített szavazatokat számolja.</div>
-        </div>
-      </div>
-    </section>
+    <section class="card">
+      <details>
+        <summary><strong>Segítség / Beállítás</strong> (Firestore szükséges több eszközös szavazáshoz)</summary>
+<pre class="small">1) Hozz létre egy Firebase projektet (Firestore adatbázissal).
+2) Engedélyezd az „Anonymous Authentication”-t.
+3) Másold be alább a <em>firebaseConfig</em> adataidat.
+4) Nyisd meg a fájlt GitHub Pagesen (vagy helyben: VS Code Live Server).
 
+Firestore szerkezet (automatikusan létrejön):
+rooms (collection)
+  - {ROOM_CODE} (doc)
+      currentIndex: number
+      createdAt: timestamp
+      isOpen: boolean
+      pinHash: string|null
+  - participants (subcollection)
+      - {deviceId} doc: { name, joinedAt, lastSeen }
+  - votes (subcollection)
+      - {deviceId_statementIndex} doc: { voterId, name, statementIndex, choice, ts }
+</pre>
+    </details>
+    </section>
   </div>
 
-  <div class="footer">Auth-olt verzió: tanár e-mail/jelszóval, diákok anonim. Tallies kliensoldali aggregálással a votes-ból.</div>
-</div>
+  <!-- Firebase SDK-k -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 
-<script>
-// ===================
-// 1) Firebase beállítás – IDE ÍRD A SAJÁTODAT
-// ===================
-const firebaseConfig = {
-  apiKey: "AIzaSyD2Gs-As_zot1XpOTLGxJbifib1usLI8sY",
-  authDomain: "szavazo-ee3b9.firebaseapp.com",
-  databaseURL: "https://szavazo-ee3b9-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "szavazo-ee3b9",
-  storageBucket: "szavazo-ee3b9.appspot.com",
-  messagingSenderId: "599940957583",
-  appId: "1:599940957583:web:77e2f10b983a59fb61b7fa"
-};
+  <script>
+  // 1) Állítások (10 tétel, 4 hamis)
+  const STATEMENTS = [
+    'Az AI nem gondolkodik, hanem mintákat követ és valószínűségek alapján generál választ.',
+    'Az AI képes tévedni, és néha teljesen hamis információt állít magabiztos hangnemben.',
+    'Ha rosszul vagy homályosan kérdezel, az AI gyakran rossz választ ad.',
+    'Az AI az internethez csatlakozva valós időben "leellenőrzi", amit mond.',
+    'Az AI nem tárolja el a felhasználó pontos kérdéseit és válaszait hosszú távra.',
+    'Az AI nem érti a szöveget emberi értelemben, csak feldolgozza a mintázatát.',
+    'A promptolás készség: tanulással jobb eredményt lehet elérni ugyanazzal a modellel.',
+    'Az AI teljesen objektív, mert nem tartalmazhat előítéletet.',
+    'Az AI képes jogsértő tartalmakat is előállítani, ha a felhasználó rosszul vagy manipulatívan kérdez.',
+    'Az AI önmagától nem dönthet úgy, hogy új célt, értéket vagy akaratot alakít ki.',
+  ];
 
-let app, db, auth;
-try{
-  app = firebase.initializeApp(firebaseConfig);
-  db = firebase.database();
-  auth = firebase.auth();
-}catch(e){
-  console.warn('Firebase init hiba vagy hiányzó config.');
-}
-
-// ===================
-// 2) UI segédek
-// ===================
-const el = sel => document.querySelector(sel);
-const mk = (tag, cls) => { const n = document.createElement(tag); if(cls) n.className = cls; return n; };
-const randomCode = () => Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(2,7);
-const anonId = (()=>{
-  const k = 'anonId';
-  let v = localStorage.getItem(k);
-  if(!v){ v = 'u_' + Math.random().toString(36).slice(2,10); localStorage.setItem(k,v); }
-  return v;
-})();
-function setStatus(selectorOrEl, msg, type='info'){
-  const n = typeof selectorOrEl === 'string' ? document.querySelector(selectorOrEl) : selectorOrEl;
-  if(!n) return; n.textContent = msg || '';
-  n.style.color = type==='error' ? 'var(--error)' : (type==='success' ? 'var(--success)' : 'var(--text-2)');
-}
-
-function setTeacherButtonsEnabled(enabled){
-  ['#create-room','#close-room','#download-csv'].forEach(sel=>{
-    const b = el(sel); if(b){ b.disabled = !enabled; }
-  });
-}
-
-// ===================
-// 3) Role Tabs & Auth state
-// ===================
-el('#tab-teacher').addEventListener('click', ()=>{
-  el('#tab-teacher').classList.add('active');
-  el('#tab-student').classList.remove('active');
-  el('#teacher-view').classList.remove('hidden');
-  el('#student-view').classList.add('hidden');
-});
-
-el('#tab-student').addEventListener('click', async ()=>{
-  el('#tab-student').classList.add('active');
-  el('#tab-teacher').classList.remove('active');
-  el('#student-view').classList.remove('hidden');
-  el('#teacher-view').classList.add('hidden');
-  // diákok: anonim bejelentkezés, ha nem vagyunk belépve
-  try{
-    if(auth && (!auth.currentUser || auth.currentUser.isAnonymous!==true)){
-      await auth.signInAnonymously();
-      setStatus('#join-status','Anonim mód: bejelentkezve.');
-    }
-  }catch(e){ console.error(e); setStatus('#join-status','Anonim bejelentkezés hiba: '+(e.message||e),'error'); }
-});
-
-if(auth){
-  auth.onAuthStateChanged((user)=>{
-    if(!user){ setStatus('#auth-status','Nincs bejelentkezve.','info'); setTeacherButtonsEnabled(false); return; }
-    const isAnon = !!user.isAnonymous;
-    if(isAnon){
-      setStatus('#auth-status','Anonim felhasználó. Tanári műveletekhez jelentkezz be.','info');
-      setTeacherButtonsEnabled(false);
-    }else{
-      setStatus('#auth-status',`Bejelentkezve: ${user.email}`,'success');
-      setTeacherButtonsEnabled(true);
-    }
-  });
-}
-
-// Tanár login/logout
-el('#teacher-login').addEventListener('click', async ()=>{
-  try{
-    const email = el('#teacher-email').value.trim();
-    const pass = el('#teacher-pass').value.trim();
-    if(!email||!pass){ setStatus('#auth-status','Adj meg e-mailt és jelszót.','error'); return; }
-    await auth.signInWithEmailAndPassword(email, pass);
-  }catch(e){ setStatus('#auth-status','Bejelentkezés hiba: '+(e.message||e),'error'); }
-});
-
-el('#teacher-logout').addEventListener('click', async ()=>{
-  try{ await auth.signOut(); setStatus('#auth-status','Kijelentkezve.','info'); }catch(e){ setStatus('#auth-status','Kijelentkezés hiba: '+(e.message||e),'error'); }
-});
-
-// ===================
-// 4) Kérdések kezelése (Tanár)
-// ===================
-const questionsEl = el('#questions');
-let questionCount = 0;
-
-function addQuestion(prefill){
-  if(questionCount>=10){ alert('Maximum 10 kérdés.'); return; }
-  questionCount++;
-  const wrap = mk('div','card qcard');
-
-  const title = mk('div','row');
-  title.innerHTML = `<div class="pill">Kérdés ${questionCount}</div>`;
-  wrap.appendChild(title);
-
-  const qLbl = mk('label'); qLbl.textContent = 'Kérdésszöveg';
-  const qInp = mk('input'); qInp.placeholder='pl. Melyik projektötlet tetszik jobban?';
-  if(prefill?.text) qInp.value = prefill.text;
-  wrap.appendChild(qLbl); wrap.appendChild(qInp);
-
-  const tLbl = mk('label'); tLbl.textContent = 'Választási lehetőségek';
-  const selType = mk('select');
-  selType.innerHTML = `
-    <option value="likert">Likert (1–5: nagyon nem–nagyon igen)</option>
-    <option value="custom">Egyedi opciók (vesszővel elválasztva)</option>
-  `;
-  if(prefill?.type) selType.value = prefill.type;
-  wrap.appendChild(tLbl); wrap.appendChild(selType);
-
-  const cLbl = mk('label'); cLbl.textContent='Egyedi opciók (vesszővel)';
-  const cInp = mk('input'); cInp.placeholder='pl. Ötlet A, Ötlet B, Ötlet C';
-  if(prefill?.custom) cInp.value = prefill.custom;
-  wrap.appendChild(cLbl); wrap.appendChild(cInp);
-
-  selType.addEventListener('change',()=>{
-    const show = selType.value==='custom';
-    cLbl.style.display = show?'block':'none';
-    cInp.style.display = show?'block':'none';
-  }); selType.dispatchEvent(new Event('change'));
-
-  const controls = mk('div','controls');
-  const del = mk('button','secondary'); del.textContent = 'Kérdés eltávolítása';
-  del.addEventListener('click',()=>{ wrap.remove(); renumberQuestions(); });
-  controls.appendChild(del);
-  wrap.appendChild(mk('div','hr'));
-  wrap.appendChild(controls);
-
-  // mentéshez szükséges getter a wrap-hez
-  wrap._getQuestion = () => {
-    const text = (qInp.value || '').trim();
-    const type = (selType.value || 'likert');
-    let options = [];
-    if(type === 'likert'){
-      options = ['1','2','3','4','5'];
-    } else {
-      const raw = (cInp.value || '').trim();
-      options = raw.split(',').map(s=>s.trim()).filter(Boolean);
-      if(options.length < 2) options = ['A','B','C'];
-    }
-    return { text, type, options };
+  // 2) Firebase config (TÖLTSD KI)
+  const firebaseConfig = {
+    apiKey: "__YOUR_API_KEY__",
+    authDomain: "__YOUR_PROJECT__.firebaseapp.com",
+    projectId: "__YOUR_PROJECT__",
+    storageBucket: "__YOUR_PROJECT__.appspot.com",
+    messagingSenderId: "__SENDER_ID__",
+    appId: "__APP_ID__"
   };
+  const CONFIG_OK = !Object.values(firebaseConfig).some(v => (v+"").startsWith("__"));
 
-  questionsEl.appendChild(wrap);
-}
-
-function renumberQuestions(){
-  questionCount = 0;
-  [...questionsEl.children].forEach((c)=>{
-    questionCount++;
-    const pill = c.querySelector('.pill');
-    if(pill) pill.textContent = `Kérdés ${questionCount}`;
-  });
-}
-
-el('#add-question').addEventListener('click',()=> addQuestion());
-el('#clear-questions').addEventListener('click',()=>{
-  questionsEl.innerHTML=''; questionCount=0;
-});
-
-// Alapértelmezett két minta kérdés
-addQuestion({text:'Mennyire tetszett a mai óra?', type:'likert'});
-addQuestion({text:'Melyik projektötlet legyen?', type:'custom', custom:'Ötlet A, Ötlet B, Ötlet C'});
-
-// ====== Helyi mentés / betöltés (LocalStorage) ======
-const LS_KEY_QUESTIONS = 'poll_questions_v1';
-const LS_KEY_TITLE = 'poll_title_v1';
-
-// Mentés: a beírt cím + kérdések (text, type, options) kerülnek a LocalStorage-ba
-function saveQuestionsToLocal(){
-  const title = (el('#poll-title')?.value || '').trim();
-  const qs = [];
-  [...questionsEl.children].forEach(card=>{
-    const q = card._getQuestion ? card._getQuestion() : null;
-    if(q && q.text) qs.push(q);
-  });
-  try{
-    localStorage.setItem(LS_KEY_TITLE, title);
-    localStorage.setItem(LS_KEY_QUESTIONS, JSON.stringify(qs));
-    setStatus('#create-status','Kérdések helyben elmentve.','success');
-  }catch(e){
-    console.error(e);
-    setStatus('#create-status','Mentési hiba (LocalStorage).','error');
-  }
-}
-
-// Betöltés: kiolvassa és visszarajzolja a kérdéseket a felületre
-function loadQuestionsFromLocal(){
-  try{
-    const title = localStorage.getItem(LS_KEY_TITLE) || '';
-    const raw = localStorage.getItem(LS_KEY_QUESTIONS);
-    if(!raw){
-      setStatus('#create-status','Nincs mentett kérdés a böngészőben.','info');
-      return;
-    }
-    const qs = JSON.parse(raw);
-    // UI törlése és újrarajzolás
-    questionsEl.innerHTML = '';
-    questionCount = 0;
-    (qs || []).forEach(q=>{
-      // addQuestion ismeri a {text, type, custom} formát; ha custom az options, visszaalakítjuk
-      if(q?.type === 'custom' && Array.isArray(q.options)){
-        addQuestion({ text: q.text, type: 'custom', custom: q.options.join(', ') });
+  let app, auth, db, unsubVotes=null, unsubRoom=null, unsubParticipants=null, unsubAllVotes=null;
+  (async function initFirebase(){
+    try{
+      if(CONFIG_OK){
+        app = firebase.initializeApp(firebaseConfig);
+        auth = firebase.auth();
+        db = firebase.firestore();
+        await auth.signInAnonymously();
       }else{
-        // likert vagy bármi más (ha nincs type, likertre esik)
-        addQuestion({ text: q.text, type: q.type || 'likert' });
+        console.warn('Firebase config nincs kitöltve – local demo mód.');
       }
-    });
-    if(el('#poll-title')) el('#poll-title').value = title;
+    }catch(e){ console.error(e); }
+  })();
 
-    setStatus('#create-status','Kérdések betöltve a helyi tárból.','success');
-  }catch(e){
-    console.error(e);
-    setStatus('#create-status','Betöltési hiba (LocalStorage).','error');
+  // 3) Segédek
+  const byId = id => document.getElementById(id);
+  const hostView = byId('hostView');
+  const voterView = byId('voterView');
+  byId('total').textContent = STATEMENTS.length;
+
+  function randCode(){
+    const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s=''; for(let i=0;i<5;i++) s += chars[Math.floor(Math.random()*chars.length)];
+    return s;
   }
-}
+  function uuid(){ return 'xxxxxxxxyxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;const v=c==='x'?r:(r&0x3|0x8);return v.toString(16);}); }
+  function setStatus(el,msg,ok=true){ el.textContent = msg; el.style.color = ok? '#2F9E44':'#D92D20'; }
+  function currentURL(){ return location.href.split('#')[0].split('?')[0]; }
+  function makeShareUrl(code){ return currentURL()+ `?role=voter&room=${encodeURIComponent(code)}`; }
+  function voteKey(room, idx, voterId){ return `ai_vote_${room}_${idx}_${voterId}`; }
+  async function sha256(str){ const enc=new TextEncoder().encode(str); const buf=await crypto.subtle.digest('SHA-256',enc); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
 
-// Gombok összekötése
-const btnSaveLocal = el('#save-questions-local');
-if(btnSaveLocal) btnSaveLocal.addEventListener('click', saveQuestionsToLocal);
+  // 4) Állapot
+  let room = null; // { code, index }
+  let deviceId = localStorage.getItem('ai_device_id') || (localStorage.setItem('ai_device_id', uuid()), localStorage.getItem('ai_device_id'));
 
-const btnLoadLocal = el('#load-questions-local');
-if(btnLoadLocal) btnLoadLocal.addEventListener('click', loadQuestionsFromLocal);
+  // 5) HOST LOGIKA
+  const roomCode = byId('roomCode');
+  const createRoomBtn = byId('createRoom');
+  const endRoomBtn = byId('endRoom');
+  const roomStatus = byId('roomStatus');
+  const shareUrl = byId('shareUrl');
+  const adminPinInput = byId('adminPin');
+  const setPinBtn = byId('setPin');
 
-// ===================
-// 5) Szoba létrehozása (Tanár)
-// ===================
-let currentRoom = null;
-let charts = [];
-let votesUnsub = null;
+  const idxEl = byId('idx');
+  const participantsEl = byId('participants');
+  const votesEl = byId('votes');
+  const statementEl = byId('statement');
+  const trueCountEl = byId('trueCount');
+  const falseCountEl = byId('falseCount');
+  const trueFill = byId('trueFill');
+  const falseFill = byId('falseFill');
+  const adminTable = byId('adminTable');
 
-async function createRoom(){
-  const status = el('#create-status');
-  try{
-    if(!db || !auth){
-      setStatus(status,'Firebase nincs beállítva.','error'); 
-      return;
+  setPinBtn.addEventListener('click', ()=>{ const pin = (adminPinInput.value||'').trim(); if(!pin){ alert('Írj be egy PIN-t!'); return;} window.__pin = pin; alert('PIN beállítva ehhez a munkamenethez.'); });
+
+  async function pinOk(){
+    if(!CONFIG_OK || !room) return true;
+    const pin = (window.__pin||'').trim(); if(!pin){ alert('Előbb add meg az Admin PIN-t!'); return false; }
+    const doc = await db.collection('rooms').doc(room.code).get();
+    const savedHash = doc.data()?.pinHash||null; if(!savedHash){ alert('Ehhez a szobához nincs PIN beállítva.'); return false; }
+    const inputHash = await sha256(pin);
+    if(inputHash !== savedHash){ alert('Hibás PIN.'); return false; }
+    return true;
+  }
+
+  async function createRoom(){
+    let code = (roomCode.value || randCode()).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
+    if(!code){ setStatus(roomStatus,'Adj meg kódot!'); return; }
+    room = { code, index: 0 };
+
+    if(CONFIG_OK){
+      const ref = db.collection('rooms').doc(code);
+      const pinHash = window.__pin ? await sha256(window.__pin) : null;
+      await ref.set({ currentIndex: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isOpen:true, pinHash });
+      subscribeRoom(code);
+      subscribeVotes(code, 0);
+      subscribeParticipants(code);
+      subscribeAllVotes(code);
     }
-    const user = auth.currentUser;
-    if(!user || user.isAnonymous){
-      setStatus(status,'Tanári bejelentkezés szükséges.','error'); 
-      return;
+
+    roomCode.value = code;
+    shareUrl.value = makeShareUrl(code);
+    setStatus(roomStatus, 'Szoba létrehozva. Oszd meg a linket!');
+    endRoomBtn.classList.remove('hidden');
+    renderHostSlide();
+  }
+
+  async function endRoom(){
+    if(!room) return; if(!(await pinOk())) return;
+    if(CONFIG_OK){
+      await db.collection('rooms').doc(room.code).update({ isOpen:false });
+      unsubVotes && unsubVotes(); unsubVotes=null;
+      unsubRoom && unsubRoom(); unsubRoom=null;
+      unsubParticipants && unsubParticipants(); unsubParticipants=null;
+      unsubAllVotes && unsubAllVotes(); unsubAllVotes=null;
     }
+    setStatus(roomStatus,'Szoba lezárva.', true);
+    room=null;
+    shareUrl.value='';
+    renderHostClear();
+    endRoomBtn.classList.add('hidden');
+  }
 
-    const title = el('#poll-title').value.trim() || 'Névtelen szavazás';
+  function renderHostSlide(){
+    if(!room){ statementEl.textContent='—'; return; }
+    idxEl.textContent = (room.index+1);
+    statementEl.textContent = STATEMENTS[room.index] || '—';
+    updateCounts(0,0);
+  }
+  function renderHostClear(){
+    idxEl.textContent = '–'; statementEl.textContent = '—'; updateCounts(0,0);
+  }
+  function updateCounts(t,f){
+    const total = Math.max(0, t+f);
+    votesEl.textContent = total;
+    trueCountEl.textContent = t; falseCountEl.textContent = f;
+    trueFill.style.width = (total? (t/total*100):0) + '%';
+    falseFill.style.width= (total? (f/total*100):0) + '%';
+  }
 
-    // kérdések kigyűjtése (TYPE mentéssel!)
-    const qs = [];
-    [...questionsEl.children].forEach(card=>{
-      const q = card._getQuestion ? card._getQuestion() : null;
-      if(q && q.text) qs.push(q);
-    });
-    if(qs.length === 0){
-      setStatus(status,'Adj meg legalább egy kérdést.','error'); 
-      return;
+  async function changeIndex(delta){
+    if(!room) return; if(!(await pinOk())) return;
+    const next = Math.min(STATEMENTS.length-1, Math.max(0, room.index + delta));
+    room.index = next;
+    if(CONFIG_OK){
+      await db.collection('rooms').doc(room.code).update({ currentIndex: next });
+      subscribeVotes(room.code, next);
     }
-
-    const code = randomCode();
-    const roomRef = db.ref(`rooms/${code}`);
-
-    await roomRef.child('meta').set({
-      title,
-      createdAt: Date.now(),
-      open: true,
-      owner: user.uid
-    });
-
-    await roomRef.child('questions').set(qs);
-
-    currentRoom = code;
-    el('#room-code').textContent = code;
-    setStatus(status, `Szoba létrehozva: ${code}`, 'success');
-    attachResults(code, qs);
-    el('#close-room').disabled = false;
-    el('#download-csv').disabled = false;
-
-  }catch(err){
-    console.error(err);
-    setStatus('#create-status', `Hiba a létrehozáskor: ${err?.message || err}`, 'error');
-  }
-}
-
-// ===================
-// 6) Likert ÁTLAG – helpertéglák
-// ===================
-function computeLikertAverageFromTallies(tallies){
-  // tallies: [n1,n2,n3,n4,n5] -> átlag (1..5)
-  const total = tallies.reduce((a,b)=>a+b,0);
-  if(!total) return NaN;
-  let sum = 0;
-  for(let i=0;i<tallies.length;i++){
-    sum += tallies[i] * (i+1);
-  }
-  return sum / total;
-}
-function mountLikertAverageBadge(container){
-  // container: a chartot körülölelő .chart-wrap
-  container.classList.add('chart-wrap');
-  let badge = container.querySelector('.avg-badge');
-  if(!badge){
-    badge = document.createElement('div');
-    badge.className = 'avg-badge';
-    badge.textContent = 'Átlag: —';
-    container.appendChild(badge);
-  }
-  return (avg)=>{ badge.textContent = `Átlag: ${isNaN(avg) ? '—' : avg.toFixed(2)}`; };
-}
-
-// ===================
-// 7) Eredmények – valós időben (votes -> aggregálás + likert átlag)
-// ===================
-let avgSetters = []; // kérdésindex -> setter (ha likert), különben null
-
-function attachResults(code, questions){
-  const container = el('#results-container');
-  container.innerHTML=''; 
-  charts = [];
-  avgSetters = [];
-
-  // kártyák + chartok felépítése
-  questions.forEach((q,idx)=>{
-    const card = mk('div','card');
-    const t = mk('div','title'); t.textContent = `Q${idx+1}. ${q.text}`; card.appendChild(t);
-
-    // Canvas egy chart-wrap-ben, hogy legyen hely a jelvénynek
-    const wrap = mk('div','chart-wrap');
-    const canvas = mk('canvas'); canvas.id = `chart_${idx}`;
-    wrap.appendChild(canvas);
-    card.appendChild(wrap);
-
-    const foot = mk('div','small muted'); foot.id=`chart_total_${idx}`; foot.textContent='—'; card.appendChild(foot);
-    container.appendChild(card);
-
-    const ctx = canvas.getContext('2d');
-    const chart = new Chart(ctx, {
-      type:'bar',
-      data:{ labels:q.options, datasets:[{ label:'Szavazatok', data:q.options.map(()=>0), backgroundColor:'#3B82F6', borderColor:'#1D4ED8', borderWidth:1, borderRadius:6 }] },
-      options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ x:{ticks:{color:'#334155'}}, y:{beginAtZero:true,ticks:{color:'#334155'}, grid:{color:'rgba(51,65,85,0.12)'} } } }
-    });
-    charts.push(chart);
-
-    // Ha Likert, tegyük fel az átlag jelvényt
-    if (q.type === 'likert' || (Array.isArray(q.options) && q.options.length===5 && q.options.join(',')==='1,2,3,4,5')){
-      avgSetters[idx] = mountLikertAverageBadge(wrap);
-    } else {
-      avgSetters[idx] = null;
-    }
-  });
-
-  // előző feliratkozás lekapcsolása, ha volt
-  if (typeof votesUnsub === 'function') { 
-    try { votesUnsub(); } catch(e) {}
-    votesUnsub = null;
+    renderHostSlide();
   }
 
-  // új feliratkozás a votes-ra és aggregálás
-  const ref = db.ref(`rooms/${code}/votes`);
-  const handler = (snap)=>{
-    const votes = snap.val() || {};
-    const tallies = questions.map(q=> q.options.map(()=>0));
-
-    // votes: { uid: [optIndexForQ0, optIndexForQ1, ...] }
-    Object.values(votes).forEach(arr=>{
-      if(Array.isArray(arr)){
-        arr.forEach((optIndex, qi)=>{
-          if(optIndex!=null && tallies[qi] && typeof tallies[qi][optIndex]==='number'){
-            tallies[qi][optIndex] += 1;
-          }
-        });
-      }
-    });
-
-    tallies.forEach((arr,i)=>{
-      if(charts[i]){
-        charts[i].data.datasets[0].data = arr;
-        charts[i].update();
-
-        const total = arr.reduce((a,b)=>a+b,0);
-        const foot = el(`#chart_total_${i}`);
-        if(foot) foot.textContent = `Összes szavazat: ${total}`;
-
-        // Likert átlag frissítés (ha van setter)
-        if (avgSetters[i]){
-          const avg = computeLikertAverageFromTallies(arr);
-          avgSetters[i](avg);
-        }
-      }
-    });
-  };
-  ref.on('value', handler);
-  votesUnsub = () => ref.off('value', handler);
-}
-
-// ===================
-// 8) CSV letöltés (votes-ból számolt pillanatkép)
-// ===================
-el('#download-csv').addEventListener('click', async ()=>{
-  if(!db || !currentRoom){ alert('Nincs aktív szoba.'); return; }
-  const [qsSnap, votesSnap, metaSnap] = await Promise.all([
-    db.ref(`rooms/${currentRoom}/questions`).once('value'),
-    db.ref(`rooms/${currentRoom}/votes`).once('value'),
-    db.ref(`rooms/${currentRoom}/meta`).once('value'),
-  ]);
-  const qs = qsSnap.val() || [];
-  const votes = votesSnap.val() || {};
-  const meta = metaSnap.val() || {};
-
-  const tallies = qs.map(q=> q.options.map(()=>0));
-  Object.values(votes).forEach(arr=>{
-    if(Array.isArray(arr)){
-      arr.forEach((oi,qi)=>{ if(oi!=null && tallies[qi]) tallies[qi][oi]++; });
-    }
-  });
-
-  let csv = `"Cím","${(meta.title||'Szavazás').replaceAll('"','""')}"\n`;
-  qs.forEach((q,i)=>{
-    csv += `\n"Kérdés ${i+1}","${q.text.replaceAll('"','""')}"\n`;
-    csv += 'Opció,Szavazatok\n';
-    q.options.forEach((opt,j)=>{
-      const n = (tallies[i] && tallies[i][j])? tallies[i][j] : 0;
-      csv += `"${opt.replaceAll('"','""')}",${n}\n`;
-    });
-    // (opcionális bővítés, ha szeretnéd menteni az átlagot is: itt kiszámolható)
-    // if (q.type==='likert') { const avg = computeLikertAverageFromTallies(tallies[i]); csv += `"Átlag",${isNaN(avg)?'':avg.toFixed(2)}\n`; }
-  });
-  const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `szavazas_${currentRoom}.csv`;
-  a.click();
-});
-
-// ===================
-// 9) Diák oldal – csatlakozás és szavazás (anon auth)
-// ===================
-let joinedRoom = null;
-let voteState = [];
-
-async function ensureAnon(){
-  if(!auth) return;
-  const u = auth.currentUser;
-  if(!u){ try{ await auth.signInAnonymously(); }catch(e){ console.error(e); } }
-}
-
-async function joinRoom(){
-  await ensureAnon();
-  if(!db){ alert('Töltsd ki a Firebase configot előbb.'); return; }
-  const code = el('#join-room-code').value.trim().toUpperCase();
-  if(!code){ el('#join-status').textContent = 'Adj meg egy kódot.'; return; }
-  const roomRef = db.ref(`rooms/${code}`);
-  const metaSnap = await roomRef.child('meta').once('value');
-  const meta = metaSnap.val();
-  if(!meta){ el('#join-status').textContent = 'Nincs ilyen szoba.'; return; }
-  if(meta.open === false){ el('#join-status').textContent = 'A szoba le van zárva.'; return; }
-
-  const qsSnap = await roomRef.child('questions').once('value');
-  const qs = qsSnap.val();
-  if(!qs || !qs.length){ el('#join-status').textContent = 'Nincsenek kérdések.'; return; }
-
-  joinedRoom = code;
-  el('#join-status').textContent = `Csatlakozva: ${(meta.title||'Szavazás')} (kód: ${code})`;
-  renderVoteArea(qs);
-
-  // Saját korábbi szavazatok visszatöltése (ha vannak)
-  const uid = auth.currentUser?.uid;
-  if(uid){
-    const prevSnap = await roomRef.child(`votes/${uid}`).once('value');
-    const prev = prevSnap.val();
-    if(prev){ voteState = prev; updateVoteUIFromState(); }
+  async function resetSlide(){
+    if(!room) return; if(!(await pinOk())) return;
+    if(!CONFIG_OK){ updateCounts(0,0); return; }
+    const path = db.collection('rooms').doc(room.code).collection('votes');
+    const snap = await path.where('statementIndex','==', room.index).get();
+    const batch = db.batch(); snap.forEach(doc=> batch.delete(doc.ref));
+    await batch.commit(); updateCounts(0,0);
   }
-}
 
-el('#join-room').addEventListener('click', joinRoom);
+  function subscribeRoom(code){
+    unsubRoom && unsubRoom(); if(!CONFIG_OK) return;
+    unsubRoom = db.collection('rooms').doc(code).onSnapshot(doc=>{
+      const d = doc.data(); if(!d) return;
+      room = { code, index: d.currentIndex||0 };
+      renderHostSlide();
+    });
+  }
+  function subscribeVotes(code, idx){
+    unsubVotes && unsubVotes(); if(!CONFIG_OK) return;
+    unsubVotes = db.collection('rooms').doc(code).collection('votes')
+      .where('statementIndex','==', idx)
+      .onSnapshot(snap=>{ let t=0,f=0; snap.forEach(doc=>{ const c = doc.data().choice; if(c==='true') t++; else if(c==='false') f++; }); updateCounts(t,f); });
+  }
+  function subscribeParticipants(code){
+    unsubParticipants && unsubParticipants(); if(!CONFIG_OK) return;
+    unsubParticipants = db.collection('rooms').doc(code).collection('participants').onSnapshot(snap=>{ participantsEl.textContent = snap.size; renderAdmin(); });
+  }
+  function subscribeAllVotes(code){
+    unsubAllVotes && unsubAllVotes(); if(!CONFIG_OK) return;
+    unsubAllVotes = db.collection('rooms').doc(code).collection('votes').onSnapshot(()=>{ renderAdmin(); });
+  }
 
-function renderVoteArea(questions){
-  const area = el('#vote-area'); area.innerHTML=''; voteState = new Array(questions.length).fill(null);
-  questions.forEach((q,qi)=>{
-    const card = mk('div','card');
-    const t = mk('div','title'); t.textContent = `Q${qi+1}. ${q.text}`; card.appendChild(t);
-    const list = mk('div','list');
-    q.options.forEach((opt,oi)=>{
-      const b = mk('button','option-btn'); b.textContent = opt;
-      b.addEventListener('click',()=>{
-        voteState[qi] = oi;
-        [...list.children].forEach(x=>x.classList.remove('selected'));
-        b.classList.add('selected');
+  async function renderAdmin(){
+    if(!CONFIG_OK || !room){ adminTable.innerHTML=''; return; }
+    const pRef = db.collection('rooms').doc(room.code).collection('participants');
+    const vRef = db.collection('rooms').doc(room.code).collection('votes');
+    const [pSnap, vSnap] = await Promise.all([pRef.get(), vRef.get()]);
+    const voters = {};
+    pSnap.forEach(d=>{ voters[d.id] = { name:d.data().name||'(névtelen)', lastSeen:d.data().lastSeen?.toDate?.()||null, votes:new Set() }; });
+    vSnap.forEach(d=>{ const x=d.data(); if(!voters[x.voterId]) voters[x.voterId] = { name:x.name||'(névtelen)', lastSeen:null, votes:new Set() }; voters[x.voterId].votes.add(x.statementIndex); });
+    const rows = Object.entries(voters).map(([id,info],i)=>{ const done=info.votes.size; const total=STATEMENTS.length; const pct=Math.round((done/total)*100); const last= info.lastSeen? info.lastSeen.toLocaleTimeString():'—'; return `<tr><td>${i+1}</td><td>${escapeHtml(info.name)}</td><td>${done}</td><td>${pct}%</td><td>${last}</td></tr>`; }).join('');
+    adminTable.innerHTML = rows || `<tr><td colspan="5" class="muted">Nincs résztvevő.</td></tr>`;
+  }
+  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+
+  // 6) VOTER LOGIKA
+  const joinCode = byId('joinCode');
+  const displayName = byId('displayName');
+  const joinBtn = byId('joinBtn');
+  const joinStatus = byId('joinStatus');
+  const voterPanel = byId('voterPanel');
+  const voterStatement = byId('voterStatement');
+  const voterThanks = byId('voterThanks');
+  const voteTrueBtn = byId('voteTrue');
+  const voteFalseBtn = byId('voteFalse');
+
+  let voter = { code:null, index:0, name:'' };
+
+  async function joinRoom(){
+    const code = (joinCode.value||'').toUpperCase().trim();
+    const name = (displayName.value||'').trim();
+    if(!code){ setStatus(joinStatus,'Írd be a kódot!', false); return; }
+    if(!name){ setStatus(joinStatus,'A név kötelező.', false); return; }
+    voter.code = code; voter.name = name;
+
+    if(CONFIG_OK){
+      const roomRef = db.collection('rooms').doc(code);
+      roomRef.onSnapshot(doc=>{
+        const d = doc.data();
+        if(!d){ setStatus(joinStatus,'Nincs ilyen szoba. Ellenőrizd a kódot!', false); voterPanel.classList.add('hidden'); return; }
+        voter.index = d.currentIndex||0;
+        voterStatement.textContent = STATEMENTS[voter.index] || '—';
+        setStatus(joinStatus,'Csatlakozva');
+        voterPanel.classList.remove('hidden');
+        voterThanks.textContent = '';
       });
-      list.appendChild(b);
-    });
-    card.appendChild(list);
-    area.appendChild(card);
-  });
-}
-
-function updateVoteUIFromState(){
-  const cards = el('#vote-area').querySelectorAll('.card');
-  cards.forEach((card,qi)=>{
-    const list = card.querySelector('.list');
-    const selIndex = voteState[qi];
-    if(selIndex==null) return;
-    const btn = list.children[selIndex];
-    if(btn){
-      [...list.children].forEach(x=>x.classList.remove('selected'));
-      btn.classList.add('selected');
+      await roomRef.collection('participants').doc(deviceId).set({ name, joinedAt: firebase.firestore.FieldValue.serverTimestamp(), lastSeen: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
+      setInterval(()=>{ roomRef.collection('participants').doc(deviceId).update({ lastSeen: firebase.firestore.FieldValue.serverTimestamp() }); }, 15000);
+    } else {
+      voter.index = 0; voterStatement.textContent = STATEMENTS[0]; setStatus(joinStatus,'Demo mód (nincs online szoba)'); voterPanel.classList.remove('hidden');
     }
-  });
-}
+  }
 
-async function submitVotes(){
-  await ensureAnon();
-  if(!db || !joinedRoom){ alert('Nem vagy csatlakozva.'); return; }
-  const hasAny = voteState.some(v=> v!=null);
-  if(!hasAny){ alert('Válassz legalább egy opciót.'); return; }
+  async function castVote(choice){
+    if(!voter.code){ setStatus(joinStatus,'Nem csatlakoztál szobához!', false); return; }
+    const k = voteKey(voter.code, voter.index, deviceId);
+    if(localStorage.getItem(k)){
+      voterThanks.textContent = 'Már szavaztál erre az állításra ezen az eszközön ezzel a névvel.'; return;
+    }
+    localStorage.setItem(k, '1');
 
-  const roomRef = db.ref(`rooms/${joinedRoom}`);
-  const metaSnap = await roomRef.child('meta').once('value');
-  const meta = metaSnap.val(); if(!meta || meta.open===false){ alert('A szoba zárva.'); return; }
+    if(CONFIG_OK){
+      const r = db.collection('rooms').doc(voter.code);
+      // Rate limit: 2 mp gombzár + 1 szavazat / állítás / eszköz (voterId_statementIndex docId)
+      disableVoteButtons(true);
+      const docId = `${deviceId}_${voter.index}`;
+      await r.collection('votes').doc(docId).set({
+        voterId: deviceId,
+        name: voter.name,
+        statementIndex: voter.index,
+        choice: choice ? 'true' : 'false',
+        ts: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: false }).catch(err=>{ console.warn('Duplicate vote? ', err.message); });
+      setTimeout(()=>disableVoteButtons(false), 2000);
+    }
+    voterThanks.textContent = 'Köszönöm, a szavazatod rögzítve!';
+  }
 
-  const uid = auth.currentUser?.uid;
-  if(!uid){ alert('Nem sikerült az anon bejelentkezés.'); return; }
+  // 7) UI események
+  byId('hostBtn').addEventListener('click', ()=>{ hostView.classList.remove('hidden'); voterView.classList.add('hidden'); });
+  byId('voterBtn').addEventListener('click', ()=>{ voterView.classList.remove('hidden'); hostView.classList.add('hidden'); });
 
-  await roomRef.child(`votes/${uid}`).set(voteState);
-  alert('Köszönjük! A válaszaid rögzítve lettek. Változtathatsz és újraküldheted bármikor, amíg a szoba nyitva van.');
-}
+  createRoomBtn.addEventListener('click', createRoom);
+  endRoomBtn.addEventListener('click', endRoom);
+  byId('copyLink').addEventListener('click', ()=>{ navigator.clipboard.writeText(shareUrl.value||''); });
+  byId('prev').addEventListener('click', ()=> changeIndex(-1));
+  byId('next').addEventListener('click', ()=> changeIndex(1));
+  byId('resetSlide').addEventListener('click', resetSlide);
 
-el('#submit-votes').addEventListener('click', submitVotes);
+  byId('refreshAdmin').addEventListener('click', renderAdmin);
+  byId('exportCsv').addEventListener('click', async ()=>{ if(!(await pinOk())) return; exportCsv(); });
 
-el('#clear-votes').addEventListener('click', async ()=>{
-  // csak a helyi UI-t töröljük
-  voteState = [];
-  localStorage.removeItem('anonId');
-  location.reload();
-});
+  joinBtn.addEventListener('click', joinRoom);
+  voteTrueBtn.addEventListener('click', ()=> castVote(true));
+  voteFalseBtn.addEventListener('click', ()=> castVote(false));
 
-// ===================
-// 10) Vezérlők eseményei
-// ===================
-el('#create-room').addEventListener('click', createRoom);
-el('#close-room').addEventListener('click', closeRoom);
-el('#test-conn').addEventListener('click', async ()=>{
-  const status = el('#create-status');
-  try{
-    if(!db){ setStatus(status,'Firebase nincs beállítva.','error'); return; }
-    await db.ref('_healthcheck').set({t: Date.now()});
-    const s = await db.ref('_healthcheck/t').once('value');
-    setStatus(status, 'Kapcsolat rendben ✔ (' + s.val() + ')', 'success');
-  }catch(e){ setStatus(status, 'Kapcsolat hiba: ' + (e.message || e), 'error'); }
-});
+  function disableVoteButtons(dis){ voteTrueBtn.disabled=dis; voteFalseBtn.disabled=dis; }
 
-// (Meglévő: closeRoom implementációja nálad – ha még nincs, tudok adni.)
-</script>
+  // 8) Export CSV
+  async function exportCsv(){
+    if(!CONFIG_OK || !room){ alert('Nincs aktív online szoba.'); return; }
+    const pRef = db.collection('rooms').doc(room.code).collection('participants');
+    const vRef = db.collection('rooms').doc(room.code).collection('votes');
+    const [pSnap, vSnap] = await Promise.all([pRef.get(), vRef.get()]);
+    const names = {}; pSnap.forEach(d=> names[d.id] = (d.data().name||'(névtelen)'));
+    const rows = [['room','voterId','name','statementIndex','choice','timestamp']];
+    vSnap.forEach(d=>{ const x=d.data(); rows.push([room.code, x.voterId, names[x.voterId]||x.name||'', x.statementIndex, x.choice, (x.ts?.toDate?.()||new Date()).toISOString()]); });
+    const csv = rows.map(r=> r.map(v=>`"${String(v).replace(/"/g,'\"')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=`ai_votes_${room.code}.csv`; a.click(); URL.revokeObjectURL(url);
+  }
+
+  // 9) Deep-link (?role=&room=)
+  (function initDeepLink(){
+    const p = new URLSearchParams(location.search);
+    const role = p.get('role'); const code = (p.get('room')||'').toUpperCase();
+    if(role==='voter'){ byId('voterBtn').click(); if(code){ joinCode.value = code; } }
+    else { byId('hostBtn').click(); if(code){ roomCode.value = code; } }
+  })();
+  </script>
 </body>
 </html>
