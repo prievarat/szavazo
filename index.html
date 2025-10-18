@@ -255,10 +255,12 @@ rooms (collection)
         auth = firebase.auth();
         db = firebase.firestore();
         await auth.signInAnonymously();
+        console.log('[OK] Firebase inicializálva, anonymous auth sikeres.');
+        window.__fbReady = true;
       }else{
         console.warn('Firebase config nincs kitöltve – local demo mód.');
       }
-    }catch(e){ console.error(e); }
+    }catch(e){ console.error('[HIBA] Firebase init/sign-in:', e); const el=document.getElementById('roomStatus'); if(el){ el.textContent='Firebase hiba: '+(e?.message||e); el.style.color='#D92D20'; } }
   })();
 
   // 3) Segédek
@@ -317,6 +319,30 @@ rooms (collection)
   async function createRoom(){
     let code = (roomCode.value || randCode()).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
     if(!code){ setStatus(roomStatus,'Adj meg kódot!'); return; }
+    room = { code, index: 0 };
+
+    if(CONFIG_OK){
+      try{
+        const ref = db.collection('rooms').doc(code);
+        const pinHash = window.__pin ? await sha256(window.__pin) : null;
+        await ref.set({ currentIndex: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isOpen:true, pinHash });
+        subscribeRoom(code);
+        subscribeVotes(code, 0);
+        subscribeParticipants(code);
+        subscribeAllVotes(code);
+        setStatus(roomStatus, 'Szoba létrehozva. Oszd meg a linket!', true);
+      }catch(e){
+        console.error('[HIBA] Szoba létrehozása:', e);
+        setStatus(roomStatus, 'Nem sikerült létrehozni a szobát: '+(e?.message||e), false);
+        return; // ne menjünk tovább, ha nem jött létre
+      }
+    }
+
+    roomCode.value = code;
+    shareUrl.value = makeShareUrl(code);
+    endRoomBtn.classList.remove('hidden');
+    renderHostSlide();
+  }
     room = { code, index: 0 };
 
     if(CONFIG_OK){
