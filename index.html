@@ -9,7 +9,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Nunito:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    /* DESIGN BRIEF COLORS */
     --primary-300:#F9C97A; --primary-500:#F4A329; --primary-700:#B45309;
     --secondary-300:#7EDAD6; --secondary-500:#2BB6B4; --secondary-700:#0F766E;
     --accent-300:#F49DB8; --accent-500:#E8467B; --accent-700:#A61E4D;
@@ -222,6 +221,16 @@ rooms (collection)
   <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 
   <script>
+  // === 0) Segédfüggvények (EZEKET HASZNÁLJUK LENT) ===
+  const byId = id => document.getElementById(id);
+  function randCode(){ const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<5;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; };
+  function uuid(){ return 'xxxxxxxxyxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;const v=c==='x'?r:(r&0x3|0x8);return v.toString(16);}); };
+  function setStatus(el,msg,ok=true){ if(!el) return; el.textContent = msg; el.style.color = ok? '#2F9E44':'#D92D20'; };
+  function currentURL(){ return location.href.split('#')[0].split('?')[0]; };
+  function makeShareUrl(code){ return currentURL()+`?role=voter&room=${encodeURIComponent(code)}`; };
+  function voteKey(room, idx, voterId){ return `ai_vote_${room}_${idx}_${voterId}`; };
+  async function sha256Hex(str){ const enc=new TextEncoder().encode(str); const buf=await crypto.subtle.digest('SHA-256',enc); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); };
+
   // 1) Állítások (10 tétel, 4 hamis)
   const STATEMENTS = [
     'Az AI nem gondolkodik, hanem mintákat követ és valószínűségek alapján generál választ.',
@@ -236,14 +245,14 @@ rooms (collection)
     'Az AI önmagától nem dönthet úgy, hogy új célt, értéket vagy akaratot alakít ki.',
   ];
 
-  // 2) Firebase config (TÖLTSD KI)
+  // 2) Firebase config (TÖLTSD KI SAJÁT ADATAIDDAL)
   const firebaseConfig = {
-    apiKey: "AIzaSyBJJucRGcaBhm7Be7tF3-IZ0RPg6cWldCM",
-    authDomain: "ai-szavazo.firebaseapp.com",
-    projectId: "ai-szavazo",
-    storageBucket: "ai-szavazo.firebasestorage.app",
-    messagingSenderId: "915231396405",
-    appId: "1:915231396405:web:509c60a6ef793066f4177c"
+    apiKey: "__YOUR_API_KEY__",
+    authDomain: "__YOUR_PROJECT__.firebaseapp.com",
+    projectId: "__YOUR_PROJECT__",
+    storageBucket: "__YOUR_PROJECT__.appspot.com",
+    messagingSenderId: "__SENDER_ID__",
+    appId: "__APP_ID__"
   };
   const CONFIG_OK = !Object.values(firebaseConfig).some(v => (v+"").startsWith("__"));
 
@@ -256,36 +265,24 @@ rooms (collection)
         db = firebase.firestore();
         await auth.signInAnonymously();
         console.log('[OK] Firebase inicializálva, anonymous auth sikeres.');
-        window.__fbReady = true;
+        byId('total').textContent = STATEMENTS.length;
       }else{
         console.warn('Firebase config nincs kitöltve – local demo mód.');
+        byId('total').textContent = STATEMENTS.length;
       }
-    }catch(e){ console.error('[HIBA] Firebase init/sign-in:', e); const el=document.getElementById('roomStatus'); if(el){ el.textContent='Firebase hiba: '+(e?.message||e); el.style.color='#D92D20'; } }
+    }catch(e){
+      console.error('[HIBA] Firebase init/sign-in:', e);
+      setStatus(byId('roomStatus'), 'Firebase hiba: '+(e?.message||e), false);
+    }
   })();
 
-  // 3) Segédek
-  const byId = id => document.getElementById(id);
+  // 3) Állapot
   const hostView = byId('hostView');
   const voterView = byId('voterView');
-  byId('total').textContent = STATEMENTS.length;
-
-  function randCode(){
-    const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let s=''; for(let i=0;i<5;i++) s += chars[Math.floor(Math.random()*chars.length)];
-    return s;
-  }
-  function uuid(){ return 'xxxxxxxxyxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;const v=c==='x'?r:(r&0x3|0x8);return v.toString(16);}); }
-  function setStatus(el,msg,ok=true){ el.textContent = msg; el.style.color = ok? '#2F9E44':'#D92D20'; }
-  function currentURL(){ return location.href.split('#')[0].split('?')[0]; }
-  function makeShareUrl(code){ return currentURL()+ `?role=voter&room=${encodeURIComponent(code)}`; }
-  function voteKey(room, idx, voterId){ return `ai_vote_${room}_${idx}_${voterId}`; }
-  async function sha256(str){ const enc=new TextEncoder().encode(str); const buf=await crypto.subtle.digest('SHA-256',enc); return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
-
-  // 4) Állapot
   let room = null; // { code, index }
   let deviceId = localStorage.getItem('ai_device_id') || (localStorage.setItem('ai_device_id', uuid()), localStorage.getItem('ai_device_id'));
 
-  // 5) HOST LOGIKA
+  // 4) HOST LOGIKA
   const roomCode = byId('roomCode');
   const createRoomBtn = byId('createRoom');
   const endRoomBtn = byId('endRoom');
@@ -304,14 +301,14 @@ rooms (collection)
   const falseFill = byId('falseFill');
   const adminTable = byId('adminTable');
 
-  setPinBtn.addEventListener('click', ()=>{ const pin = (adminPinInput.value||'').trim(); if(!pin){ alert('Írj be egy PIN-t!'); return;} window.__pin = pin; alert('PIN beállítva ehhez a munkamenethez.'); });
+  setPinBtn.addEventListener('click', ()=>{ const pin=(adminPinInput.value||'').trim(); if(!pin){ alert('Írj be egy PIN-t!'); return;} window.__pin = pin; alert('PIN beállítva ehhez a munkamenethez.'); });
 
   async function pinOk(){
-    if(!CONFIG_OK || !room) return true;
+    if(!CONFIG_OK || !room) return true; // demo módban nincs ellenőrzés
     const pin = (window.__pin||'').trim(); if(!pin){ alert('Előbb add meg az Admin PIN-t!'); return false; }
     const doc = await db.collection('rooms').doc(room.code).get();
     const savedHash = doc.data()?.pinHash||null; if(!savedHash){ alert('Ehhez a szobához nincs PIN beállítva.'); return false; }
-    const inputHash = await sha256(pin);
+    const inputHash = await sha256Hex(pin);
     if(inputHash !== savedHash){ alert('Hibás PIN.'); return false; }
     return true;
   }
@@ -324,7 +321,7 @@ rooms (collection)
     if(CONFIG_OK){
       try{
         const ref = db.collection('rooms').doc(code);
-        const pinHash = window.__pin ? await sha256(window.__pin) : null;
+        const pinHash = window.__pin ? await sha256Hex(window.__pin) : null;
         await ref.set({ currentIndex: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isOpen:true, pinHash });
         subscribeRoom(code);
         subscribeVotes(code, 0);
@@ -334,30 +331,11 @@ rooms (collection)
       }catch(e){
         console.error('[HIBA] Szoba létrehozása:', e);
         setStatus(roomStatus, 'Nem sikerült létrehozni a szobát: '+(e?.message||e), false);
-        return; // ne menjünk tovább, ha nem jött létre
+        return;
       }
     }
 
-    roomCode.value = code;
-    shareUrl.value = makeShareUrl(code);
-    endRoomBtn.classList.remove('hidden');
-    renderHostSlide();
-  }
-    room = { code, index: 0 };
-
-    if(CONFIG_OK){
-      const ref = db.collection('rooms').doc(code);
-      const pinHash = window.__pin ? await sha256(window.__pin) : null;
-      await ref.set({ currentIndex: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isOpen:true, pinHash });
-      subscribeRoom(code);
-      subscribeVotes(code, 0);
-      subscribeParticipants(code);
-      subscribeAllVotes(code);
-    }
-
-    roomCode.value = code;
-    shareUrl.value = makeShareUrl(code);
-    setStatus(roomStatus, 'Szoba létrehozva. Oszd meg a linket!');
+    roomCode.value = code; shareUrl.value = makeShareUrl(code);
     endRoomBtn.classList.remove('hidden');
     renderHostSlide();
   }
@@ -366,92 +344,28 @@ rooms (collection)
     if(!room) return; if(!(await pinOk())) return;
     if(CONFIG_OK){
       await db.collection('rooms').doc(room.code).update({ isOpen:false });
-      unsubVotes && unsubVotes(); unsubVotes=null;
-      unsubRoom && unsubRoom(); unsubRoom=null;
-      unsubParticipants && unsubParticipants(); unsubParticipants=null;
-      unsubAllVotes && unsubAllVotes(); unsubAllVotes=null;
+      unsubVotes && unsubVotes(); unsubVotes=null; unsubRoom && unsubRoom(); unsubRoom=null; unsubParticipants && unsubParticipants(); unsubParticipants=null; unsubAllVotes && unsubAllVotes(); unsubAllVotes=null;
     }
     setStatus(roomStatus,'Szoba lezárva.', true);
-    room=null;
-    shareUrl.value='';
-    renderHostClear();
-    endRoomBtn.classList.add('hidden');
+    room=null; shareUrl.value=''; renderHostClear(); endRoomBtn.classList.add('hidden');
   }
 
-  function renderHostSlide(){
-    if(!room){ statementEl.textContent='—'; return; }
-    idxEl.textContent = (room.index+1);
-    statementEl.textContent = STATEMENTS[room.index] || '—';
-    updateCounts(0,0);
-  }
-  function renderHostClear(){
-    idxEl.textContent = '–'; statementEl.textContent = '—'; updateCounts(0,0);
-  }
-  function updateCounts(t,f){
-    const total = Math.max(0, t+f);
-    votesEl.textContent = total;
-    trueCountEl.textContent = t; falseCountEl.textContent = f;
-    trueFill.style.width = (total? (t/total*100):0) + '%';
-    falseFill.style.width= (total? (f/total*100):0) + '%';
-  }
+  function renderHostSlide(){ if(!room){ statementEl.textContent='—'; return; } idxEl.textContent=(room.index+1); statementEl.textContent=STATEMENTS[room.index]||'—'; updateCounts(0,0); };
+  function renderHostClear(){ idxEl.textContent='–'; statementEl.textContent='—'; updateCounts(0,0); };
+  function updateCounts(t,f){ const total=Math.max(0,t+f); votesEl.textContent=total; trueCountEl.textContent=t; falseCountEl.textContent=f; trueFill.style.width=(total?(t/total*100):0)+'%'; falseFill.style.width=(total?(f/total*100):0)+'%'; };
 
-  async function changeIndex(delta){
-    if(!room) return; if(!(await pinOk())) return;
-    const next = Math.min(STATEMENTS.length-1, Math.max(0, room.index + delta));
-    room.index = next;
-    if(CONFIG_OK){
-      await db.collection('rooms').doc(room.code).update({ currentIndex: next });
-      subscribeVotes(room.code, next);
-    }
-    renderHostSlide();
-  }
+  async function changeIndex(delta){ if(!room) return; if(!(await pinOk())) return; const next=Math.min(STATEMENTS.length-1, Math.max(0, room.index+delta)); room.index=next; if(CONFIG_OK){ await db.collection('rooms').doc(room.code).update({ currentIndex: next }); subscribeVotes(room.code, next); } renderHostSlide(); };
+  async function resetSlide(){ if(!room) return; if(!(await pinOk())) return; if(!CONFIG_OK){ updateCounts(0,0); return;} const path=db.collection('rooms').doc(room.code).collection('votes'); const snap=await path.where('statementIndex','==', room.index).get(); const batch=db.batch(); snap.forEach(doc=>batch.delete(doc.ref)); await batch.commit(); updateCounts(0,0); };
 
-  async function resetSlide(){
-    if(!room) return; if(!(await pinOk())) return;
-    if(!CONFIG_OK){ updateCounts(0,0); return; }
-    const path = db.collection('rooms').doc(room.code).collection('votes');
-    const snap = await path.where('statementIndex','==', room.index).get();
-    const batch = db.batch(); snap.forEach(doc=> batch.delete(doc.ref));
-    await batch.commit(); updateCounts(0,0);
-  }
+  function subscribeRoom(code){ unsubRoom && unsubRoom(); if(!CONFIG_OK) return; unsubRoom = db.collection('rooms').doc(code).onSnapshot(doc=>{ const d=doc.data(); if(!d) return; room={ code, index: d.currentIndex||0 }; renderHostSlide(); }); };
+  function subscribeVotes(code, idx){ unsubVotes && unsubVotes(); if(!CONFIG_OK) return; unsubVotes = db.collection('rooms').doc(code).collection('votes').where('statementIndex','==', idx).onSnapshot(snap=>{ let t=0,f=0; snap.forEach(doc=>{ const c=doc.data().choice; if(c==='true') t++; else if(c==='false') f++; }); updateCounts(t,f); }); };
+  function subscribeParticipants(code){ unsubParticipants && unsubParticipants(); if(!CONFIG_OK) return; unsubParticipants = db.collection('rooms').doc(code).collection('participants').onSnapshot(snap=>{ participantsEl.textContent = snap.size; renderAdmin(); }); };
+  function subscribeAllVotes(code){ unsubAllVotes && unsubAllVotes(); if(!CONFIG_OK) return; unsubAllVotes = db.collection('rooms').doc(code).collection('votes').onSnapshot(()=>{ renderAdmin(); }); };
 
-  function subscribeRoom(code){
-    unsubRoom && unsubRoom(); if(!CONFIG_OK) return;
-    unsubRoom = db.collection('rooms').doc(code).onSnapshot(doc=>{
-      const d = doc.data(); if(!d) return;
-      room = { code, index: d.currentIndex||0 };
-      renderHostSlide();
-    });
-  }
-  function subscribeVotes(code, idx){
-    unsubVotes && unsubVotes(); if(!CONFIG_OK) return;
-    unsubVotes = db.collection('rooms').doc(code).collection('votes')
-      .where('statementIndex','==', idx)
-      .onSnapshot(snap=>{ let t=0,f=0; snap.forEach(doc=>{ const c = doc.data().choice; if(c==='true') t++; else if(c==='false') f++; }); updateCounts(t,f); });
-  }
-  function subscribeParticipants(code){
-    unsubParticipants && unsubParticipants(); if(!CONFIG_OK) return;
-    unsubParticipants = db.collection('rooms').doc(code).collection('participants').onSnapshot(snap=>{ participantsEl.textContent = snap.size; renderAdmin(); });
-  }
-  function subscribeAllVotes(code){
-    unsubAllVotes && unsubAllVotes(); if(!CONFIG_OK) return;
-    unsubAllVotes = db.collection('rooms').doc(code).collection('votes').onSnapshot(()=>{ renderAdmin(); });
-  }
+  async function renderAdmin(){ if(!CONFIG_OK || !room){ adminTable.innerHTML=''; return; } const pRef=db.collection('rooms').doc(room.code).collection('participants'); const vRef=db.collection('rooms').doc(room.code).collection('votes'); const [pSnap, vSnap]=await Promise.all([pRef.get(), vRef.get()]); const voters={}; pSnap.forEach(d=>{ voters[d.id]={ name:d.data().name||'(névtelen)', lastSeen:d.data().lastSeen?.toDate?.()||null, votes:new Set() }; }); vSnap.forEach(d=>{ const x=d.data(); if(!voters[x.voterId]) voters[x.voterId]={ name:x.name||'(névtelen)', lastSeen:null, votes:new Set() }; voters[x.voterId].votes.add(x.statementIndex); }); const rows=Object.entries(voters).map(([id,info],i)=>{ const done=info.votes.size; const total=STATEMENTS.length; const pct=Math.round((done/total)*100); const last= info.lastSeen? info.lastSeen.toLocaleTimeString():'—'; return `<tr><td>${i+1}</td><td>${escapeHtml(info.name)}</td><td>${done}</td><td>${pct}%</td><td>${last}</td></tr>`; }).join(''); adminTable.innerHTML = rows || `<tr><td colspan="5" class="muted">Nincs résztvevő.</td></tr>`; };
+  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); };
 
-  async function renderAdmin(){
-    if(!CONFIG_OK || !room){ adminTable.innerHTML=''; return; }
-    const pRef = db.collection('rooms').doc(room.code).collection('participants');
-    const vRef = db.collection('rooms').doc(room.code).collection('votes');
-    const [pSnap, vSnap] = await Promise.all([pRef.get(), vRef.get()]);
-    const voters = {};
-    pSnap.forEach(d=>{ voters[d.id] = { name:d.data().name||'(névtelen)', lastSeen:d.data().lastSeen?.toDate?.()||null, votes:new Set() }; });
-    vSnap.forEach(d=>{ const x=d.data(); if(!voters[x.voterId]) voters[x.voterId] = { name:x.name||'(névtelen)', lastSeen:null, votes:new Set() }; voters[x.voterId].votes.add(x.statementIndex); });
-    const rows = Object.entries(voters).map(([id,info],i)=>{ const done=info.votes.size; const total=STATEMENTS.length; const pct=Math.round((done/total)*100); const last= info.lastSeen? info.lastSeen.toLocaleTimeString():'—'; return `<tr><td>${i+1}</td><td>${escapeHtml(info.name)}</td><td>${done}</td><td>${pct}%</td><td>${last}</td></tr>`; }).join('');
-    adminTable.innerHTML = rows || `<tr><td colspan="5" class="muted">Nincs résztvevő.</td></tr>`;
-  }
-  function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
-
-  // 6) VOTER LOGIKA
+  // 5) VOTER LOGIKA
   const joinCode = byId('joinCode');
   const displayName = byId('displayName');
   const joinBtn = byId('joinBtn');
@@ -487,14 +401,12 @@ rooms (collection)
     } else {
       voter.index = 0; voterStatement.textContent = STATEMENTS[0]; setStatus(joinStatus,'Demo mód (nincs online szoba)'); voterPanel.classList.remove('hidden');
     }
-  }
+  };
 
   async function castVote(choice){
     if(!voter.code){ setStatus(joinStatus,'Nem csatlakoztál szobához!', false); return; }
     const k = voteKey(voter.code, voter.index, deviceId);
-    if(localStorage.getItem(k)){
-      voterThanks.textContent = 'Már szavaztál erre az állításra ezen az eszközön ezzel a névvel.'; return;
-    }
+    if(localStorage.getItem(k)){ voterThanks.textContent = 'Már szavaztál erre az állításra ezen az eszközön ezzel a névvel.'; return; }
     localStorage.setItem(k, '1');
 
     if(CONFIG_OK){
@@ -503,38 +415,32 @@ rooms (collection)
       disableVoteButtons(true);
       const docId = `${deviceId}_${voter.index}`;
       await r.collection('votes').doc(docId).set({
-        voterId: deviceId,
-        name: voter.name,
-        statementIndex: voter.index,
-        choice: choice ? 'true' : 'false',
-        ts: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: false }).catch(err=>{ console.warn('Duplicate vote? ', err.message); });
+        voterId: deviceId, name: voter.name, statementIndex: voter.index,
+        choice: choice ? 'true' : 'false', ts: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: false }).catch(err=>{ console.warn('Duplicate vote?', err.message); });
       setTimeout(()=>disableVoteButtons(false), 2000);
     }
     voterThanks.textContent = 'Köszönöm, a szavazatod rögzítve!';
-  }
+  };
 
-  // 7) UI események
+  // 6) UI események
   byId('hostBtn').addEventListener('click', ()=>{ hostView.classList.remove('hidden'); voterView.classList.add('hidden'); });
   byId('voterBtn').addEventListener('click', ()=>{ voterView.classList.remove('hidden'); hostView.classList.add('hidden'); });
-
   createRoomBtn.addEventListener('click', createRoom);
   endRoomBtn.addEventListener('click', endRoom);
   byId('copyLink').addEventListener('click', ()=>{ navigator.clipboard.writeText(shareUrl.value||''); });
   byId('prev').addEventListener('click', ()=> changeIndex(-1));
   byId('next').addEventListener('click', ()=> changeIndex(1));
   byId('resetSlide').addEventListener('click', resetSlide);
-
   byId('refreshAdmin').addEventListener('click', renderAdmin);
   byId('exportCsv').addEventListener('click', async ()=>{ if(!(await pinOk())) return; exportCsv(); });
-
   joinBtn.addEventListener('click', joinRoom);
   voteTrueBtn.addEventListener('click', ()=> castVote(true));
   voteFalseBtn.addEventListener('click', ()=> castVote(false));
 
-  function disableVoteButtons(dis){ voteTrueBtn.disabled=dis; voteFalseBtn.disabled=dis; }
+  function disableVoteButtons(dis){ voteTrueBtn.disabled=dis; voteFalseBtn.disabled=dis; };
 
-  // 8) Export CSV
+  // 7) Export CSV
   async function exportCsv(){
     if(!CONFIG_OK || !room){ alert('Nincs aktív online szoba.'); return; }
     const pRef = db.collection('rooms').doc(room.code).collection('participants');
@@ -547,15 +453,10 @@ rooms (collection)
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href=url; a.download=`ai_votes_${room.code}.csv`; a.click(); URL.revokeObjectURL(url);
-  }
+  };
 
-  // 9) Deep-link (?role=&room=)
-  (function initDeepLink(){
-    const p = new URLSearchParams(location.search);
-    const role = p.get('role'); const code = (p.get('room')||'').toUpperCase();
-    if(role==='voter'){ byId('voterBtn').click(); if(code){ joinCode.value = code; } }
-    else { byId('hostBtn').click(); if(code){ roomCode.value = code; } }
-  })();
+  // 8) Deep-link (?role=&room=)
+  (function initDeepLink(){ const p=new URLSearchParams(location.search); const role=p.get('role'); const code=(p.get('room')||'').toUpperCase(); if(role==='voter'){ byId('voterBtn').click(); if(code){ byId('joinCode').value = code; } } else { byId('hostBtn').click(); if(code){ byId('roomCode').value = code; } } })();
   </script>
 </body>
 </html>
